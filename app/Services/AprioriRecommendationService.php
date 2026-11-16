@@ -12,8 +12,10 @@ class AprioriRecommendationService
             $pythonScript = base_path('python/apriori_recommendation.py');
             $dataFile = storage_path('app/transactions.csv');
 
-            // Export data transaksi ke CSV
-            $this->exportTransactionsToCsv($dataFile, $userId);
+            // Do not run the algorithm with a stale CSV export when no transactions exist.
+            if (!$this->exportTransactionsToCsv($dataFile, $userId)) {
+                return [];
+            }
 
             // Jalankan skrip Python. PYTHON_BINARY dapat disesuaikan untuk Windows/Linux.
             $pythonBinary = config('recommendations.python_binary', 'python3');
