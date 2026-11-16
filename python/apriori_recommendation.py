@@ -9,7 +9,14 @@ def load_transactions(file_path):
         df = pd.read_csv(file_path)
         if df.empty:
             return []
-        transactions = df.groupby('order_id')['product_id'].apply(list).values.tolist()
+        if not {'order_id', 'product_id'}.issubset(df.columns):
+            return []
+        df = df.dropna(subset=['order_id', 'product_id'])
+        transactions = (
+            df.groupby('order_id')['product_id']
+            .apply(lambda values: list(pd.unique(values)))
+            .values.tolist()
+        )
         return transactions
     except Exception as e:
         return []
@@ -51,12 +58,28 @@ def get_recommendations(product_id, rules):
     if rules.empty:
         return []
     
-    recommendations = rules[rules['antecedents'].apply(lambda x: product_id in x)]
+    # The current PHP service supplies one product ID, not a complete cart.
+    # Only use rules whose full antecedent is satisfied by that one product.
+    recommendations = rules[
+        rules['antecedents'].apply(
+            lambda items: len(items) == 1 and product_id in items
+        )
+    ].sort_values(
+        by=['confidence', 'lift', 'support'],
+        ascending=[False, False, False],
+    )
+
     recommended_products = []
     for _, row in recommendations.iterrows():
         for product in row['consequents']:
-            if product not in recommended_products:
-                recommended_products.append(int(product))  # Konversi ke int
+            try:
+                product_value = int(product)
+            except (TypeError, ValueError):
+                continue
+
+            if product_value != int(product_id) and product_value not in recommended_products:
+                recommended_products.append(product_value)
+
     return recommended_products
 
 def main():
