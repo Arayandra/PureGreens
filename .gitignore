@@ -1,0 +1,37 @@
+/.phpunit.cache
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/vendor
+.env
+.env.*
+!.env.example
+.env.backup
+.env.production
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+auth.json
+npm-debug.log
+yarn-error.log
+/.fleet
+/.idea
+/.vscode
+/Laravel-9-E-Commerce
+
+# Local runtime data
+/storage/logs/*.log
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/bootstrap/cache/*.php
+/database/*.sqlite
+/database/*.sqlite3
+/.phpunit.cache
+/public/vendor/livewire/
+/public/vendor/
+
+# Git metadata
+/.git/
