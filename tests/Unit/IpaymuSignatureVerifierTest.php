@@ -43,19 +43,23 @@ class IpaymuSignatureVerifierTest extends TestCase
         $this->assertFalse($verifier->verify(['reference_id' => 'ORDER-123'], 'signature', ''));
     }
 
-    public function test_it_adds_an_empty_additional_info_array_before_signing(): void
+    public function test_it_normalizes_key_order_and_additional_info_before_signing(): void
     {
         $verifier = new IpaymuSignatureVerifier();
-
-        $normalized = $verifier->normalize([
+        $firstPayload = [
+            'status' => 'success',
+            'reference_id' => 'ORDER-123',
+            'signature' => 'not-part-of-the-payload',
+        ];
+        $secondPayload = [
             'reference_id' => 'ORDER-123',
             'status' => 'success',
-        ]);
+        ];
 
-        $this->assertSame([], $normalized['additional_info']);
-        $this->assertSame(
-            array_values($normalized),
-            array_values(array_merge([], $normalized))
-        );
+        $firstSignature = $verifier->expectedSignature($firstPayload, '1234567890');
+        $secondSignature = $verifier->expectedSignature($secondPayload, '1234567890');
+
+        $this->assertSame($firstSignature, $secondSignature);
+        $this->assertSame([], $verifier->normalize($firstPayload)['additional_info']);
     }
 }
