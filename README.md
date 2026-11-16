@@ -1,5 +1,7 @@
 # PureGreens
 
+![CI](https://github.com/Arayandra/PureGreens/actions/workflows/ci.yml/badge.svg?branch=main)
+
 Repository GitHub: [https://github.com/Arayandra/PureGreens.git](https://github.com/Arayandra/PureGreens.git)
 
 PureGreens adalah aplikasi e-commerce untuk katalog dan penjualan produk sayuran segar. Proyek ini dibangun menggunakan Laravel dan Livewire, dengan panel administrasi Filament serta modul rekomendasi produk berbasis algoritma Apriori.
@@ -171,3 +173,22 @@ Belum ada lisensi proyek yang ditentukan secara khusus. Tambahkan file lisensi s
 This application currently uses Laravel 10, Livewire 2, and Filament 2. Laravel 10 is outside its official security-support window. The payment callback now has an explicit route, HMAC verification, amount matching, and signature unit tests; nevertheless, use only iPaymu sandbox credentials until an end-to-end provider test is completed.
 
 Plan a staged upgrade to a supported Laravel release and compatible Livewire/Filament versions. Do not upgrade all packages in one unreviewed step: first verify PHP 8.3+, Laravel 13 compatibility, Filament panel/resource changes, Livewire component behavior, Cashier, invoice generation, and the Python recommendation bridge. The current CI tests the existing framework and checks the Apriori unit tests; it does not make this legacy framework production-supported.
+
+
+## Rencana upgrade Laravel
+
+**Baseline saat ini:** Laravel 10, PHP 8.1+, Filament 2, dan Livewire 2. Security support Laravel 10 berakhir pada **4 Februari 2025**.
+
+**Target:** Laravel 13 dengan PHP 8.3+. Upgrade belum diterapkan pada `composer.json` atau `composer.lock`. Pekerjaan ini memiliki risiko integrasi lebih tinggi karena versi Filament, Livewire, Cashier, dan plugin Filament harus dinaikkan secara kompatibel; jangan hanya mengganti constraint framework.
+
+Tahapan yang disarankan:
+
+1. Buat branch `upgrade/laravel-13` dan simpan baseline test serta CI saat ini.
+2. Siapkan PHP 8.3+, lalu periksa dukungan Laravel 13 untuk Filament, Livewire, Cashier, Filament Export, Overlook, shopping cart, dan invoice package.
+3. Upgrade komponen admin dan Livewire mengikuti panduan migrasi resmi masing-masing paket. Pisahkan perubahan UI admin dari perubahan alur pembayaran.
+4. Verifikasi autentikasi, katalog, cart, checkout, invoice, order history, admin CRUD, serta modul Apriori. Uji callback iPaymu memakai kredensial sandbox dan endpoint HTTPS publik; CI saja tidak menggantikan pengujian sandbox provider.
+5. Jalankan `composer validate`, `composer audit`, `php artisan test`, build Vite, test Python untuk modul rekomendasi, dan workflow CI. Perbarui lockfile setelah dependency dan seluruh test tervalidasi.
+
+File `draft.yaml`, `.blueprint`, dataset, model, dan gambar produk tidak dihapus pada tahap pembersihan ini karena perlu dipastikan terlebih dahulu apakah masih digunakan untuk dokumentasi, generator, atau fitur aplikasi.
+
+Referensi: [Laravel release/support policy](https://laravel.com/framework/docs/releases) · [Laravel 13 upgrade guide](https://laravel.com/docs/13.x/upgrade).
