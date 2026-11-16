@@ -191,3 +191,8 @@ Referensi: [Laravel release/support policy](https://laravel.com/framework/docs/r
 ## Screenshot aplikasi
 
 Screenshot browser dari aplikasi yang sedang berjalan belum tersedia di repository ini. Foto sayuran dan gambar produk adalah aset konten, bukan bukti tampilan aplikasi. Setelah menjalankan toko dan panel admin dengan data demo, simpan screenshot halaman katalog/produk, cart atau checkout, serta dashboard Filament ke `docs/screenshots/` dan tampilkan dengan tautan Markdown.
+
+
+## Latest CI verification
+
+Verified on **16 November 2026** on branch `main`: **28 Laravel tests passed (62 assertions)** and **5 Python Apriori unit tests passed**. CI also completed the Vite production build. The iPaymu callback has unit-level verification, but a real provider sandbox transaction still needs a separately configured end-to-end test.
