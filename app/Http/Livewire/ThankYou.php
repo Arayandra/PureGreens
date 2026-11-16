@@ -19,7 +19,7 @@ class ThankYou extends Component
             return redirect()->route('home')->withErrors(['error' => 'Silakan login terlebih dahulu']);
         }
 
-        $order = $trxId ? Order::where('trx_id', $trxId)->first() : null;
+        $order = $trxId ? Order::where('trx_id', $trxId)->where('user_id', $customer->id)->first() : null;
         if ($trxId && (!$order || $order->status !== 'completed')) {
             return redirect()->route('home')->withErrors(['error' => 'Transaksi tidak valid']);
         }
