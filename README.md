@@ -16,7 +16,7 @@ PureGreens adalah aplikasi e-commerce untuk katalog dan penjualan produk sayuran
 - Rekomendasi produk menggunakan association rules (Apriori) dari riwayat transaksi.
 - Email notifikasi pesanan.
 
-> **Catatan status:** source code telah dirapikan agar route dan autoload service dapat dibaca pada sistem yang case-sensitive. Integrasi pembayaran iPaymu tetap membutuhkan kredensial yang valid dan pengujian callback/webhook. Endpoint callback belum tersedia sebagai route aktif pada source saat ini, sehingga alur pembaruan status pembayaran otomatis belum siap untuk produksi.
+> **Catatan status:** checkout menggunakan callback iPaymu pada `POST /ipaymu/callback`. Callback diverifikasi dengan HMAC-SHA256 menggunakan Merchant VA, mengecek nominal pesanan, dan mencegah callback berulang menurunkan status pesanan yang sudah selesai. Pengujian sandbox dengan kredensial Merchant milik pemilik repository tetap wajib sebelum transaksi nyata.
 
 ## Teknologi
 
@@ -129,7 +129,11 @@ Jangan pernah melakukan commit terhadap `.env`, API key, VA, password, atau kred
 php artisan route:list
 php artisan test
 npm run build
+python -m pip install -r python/requirements.txt
+cd python && python -m unittest -v test_apriori_recommendation.py
 ```
+
+GitHub Actions runs Laravel tests, the Vite build, and the Apriori unit tests on pushes and pull requests.
 
 Pastikan database sudah berjalan dan konfigurasi `.env` sudah benar sebelum menjalankan pengujian yang mengakses database.
 
