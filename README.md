@@ -192,3 +192,8 @@ Tahapan yang disarankan:
 File `draft.yaml`, `.blueprint`, dataset, model, dan gambar produk tidak dihapus pada tahap pembersihan ini karena perlu dipastikan terlebih dahulu apakah masih digunakan untuk dokumentasi, generator, atau fitur aplikasi.
 
 Referensi: [Laravel release/support policy](https://laravel.com/framework/docs/releases) · [Laravel 13 upgrade guide](https://laravel.com/docs/13.x/upgrade).
+
+
+## Screenshot aplikasi
+
+Screenshot browser dari aplikasi yang sedang berjalan belum tersedia di repository ini. Foto sayuran dan gambar produk adalah aset konten, bukan bukti tampilan aplikasi. Setelah menjalankan toko dan panel admin dengan data demo, simpan screenshot halaman katalog/produk, cart atau checkout, serta dashboard Filament ke `docs/screenshots/` dan tampilkan dengan tautan Markdown.
