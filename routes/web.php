@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\IpaymuCallbackController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Livewire\Cart;
 use App\Http\Livewire\Checkout;
@@ -23,6 +24,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', [Home::class, 'render'])->name('home');
+
+// Public payment provider webhook. Signature verification is enforced by the controller.
+Route::post('/ipaymu/callback', IpaymuCallbackController::class)->name('ipaymu.callback');
 
 Route::get('/product/{product_id}', [ProductDetails::class, 'render'])->name('product.details');
 
