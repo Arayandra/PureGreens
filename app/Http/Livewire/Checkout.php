@@ -5,11 +5,13 @@ namespace App\Http\Livewire;
 use App\Mail\OrderReceived;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Product;
 use App\Services\InvoiceService;
 use Livewire\Component;
 use App\Http\Livewire\Cart;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
@@ -20,219 +22,208 @@ class Checkout extends Component
     public function initiatePayment()
     {
         $user = Auth::user();
-        $cart = session()->get('cart', []);
+        if (!$user) {
+            return redirect()->route('login');
+        }
 
+        $cart = session()->get('cart', []);
         if (empty($cart)) {
             session()->flash('error', 'Keranjang kosong');
             return redirect()->route('cart');
         }
 
-        $products = [];
-        $prices = [];
-        $quantities = [];
-        $descriptions = [];
-        $totalAmount = 0;
-
-        foreach ($cart as $item) {
-            // Pastikan struktur data cart konsisten
-            $product = $item['model'] ?? $item['product'] ?? null;
-            $qty = (int) ($item['qty'] ?? $item['quantity'] ?? 1);
-            
-            if (!$product) {
-                Log::error('Product not found in cart item:', $item);
-                continue;
-            }
-
-            $products[] = $product->name;
-            $prices[] = (int) $product->price; // Pastikan integer
-            $quantities[] = $qty;
-            $descriptions[] = $product->description ?? 'Produk ' . $product->name;
-            $totalAmount += $product->price * $qty;
-        }
-
-        // Validasi apakah ada produk
-        if (empty($products)) {
-            session()->flash('error', 'Tidak ada produk valid dalam keranjang');
-            return redirect()->route('cart');
-        }
-
-        // Generate unique transaction ID
-        $trxId = 'TRX-' . time() . '-' . uniqid();
-
-        // Simpan transaksi ke database
-        $order = Order::create([
-            'user_id' => $user->id,
-            'total' => $totalAmount,
-            'status' => 'pending',
-            'trx_id' => $trxId,
-        ]);
-
-        // Simpan order items
-        foreach ($cart as $item) {
-            $product = $item['model'] ?? $item['product'] ?? null;
-            $qty = (int) ($item['qty'] ?? $item['quantity'] ?? 1);
-            
-            if ($product) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'product_id' => $product->id,
-                    'quantity' => $qty,
-                    'price' => $product->price,
-                ]);
-            }
-        }
-
-        // Data transaksi untuk iPaymu
-        $payload = [
-            'product' => $products,
-            'price' => $prices,
-            'qty' => $quantities,
-            'description' => $descriptions, // Pastikan jumlah deskripsi sama dengan produk
-            'buyerName' => $user->name, // Gunakan camelCase
-            'buyerEmail' => $user->email,
-            'buyerPhone' => $user->phone ?? '08123456789', // Ambil dari user atau default
-            'returnUrl' => config('ipaymu.url.return') . '?trx_id=' . $order->trx_id,
-            'notifyUrl' => config('ipaymu.url.notify') ?: url('/payment/notify'),
-            'cancelUrl' => config('ipaymu.url.cancel'),
-            'referenceId' => $order->trx_id,
-        ];
-
-        // Log payload untuk debugging
-        Log::info('iPaymu Payload:', $payload);
-
-        // Generate signature
-        $jsonBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
-        $requestBody = strtolower(hash('sha256', $jsonBody));
-        $stringToSign = strtoupper('POST') . ':' . config('ipaymu.va') . ':' . $requestBody . ':' . config('ipaymu.api_key');
-        $signature = hash_hmac('sha256', $stringToSign, config('ipaymu.api_key'));
-        $timestamp = now()->format('YmdHis');
-
-        Log::info('Payment Debug Info:', [
-            'products_count' => count($products),
-            'prices_count' => count($prices),
-            'quantities_count' => count($quantities),
-            'descriptions_count' => count($descriptions),
-            'total_amount' => $totalAmount,
-            'payload' => $payload,
-            'signature' => $signature
-        ]);
-
         try {
-            $response = Http::timeout(30) // Increase timeout
+            $order = DB::transaction(function () use ($cart, $user) {
+                $products = [];
+                $prices = [];
+                $quantities = [];
+                $descriptions = [];
+                $totalAmount = 0;
+
+                foreach ($cart as $item) {
+                    $productModel = $item['model'] ?? $item['product'] ?? null;
+                    $productId = $productModel?->id ?? $item['id'] ?? null;
+                    $quantity = (int) ($item['qty'] ?? $item['quantity'] ?? 0);
+
+                    if (!$productId || $quantity < 1) {
+                        throw new \RuntimeException('Item keranjang tidak valid.');
+                    }
+
+                    $product = Product::query()->lockForUpdate()->find($productId);
+                    if (!$product || (int) $product->stock < $quantity) {
+                        throw new \RuntimeException('Stok produk tidak mencukupi.');
+                    }
+
+                    $unitPrice = (float) $product->price;
+                    $products[] = $product->name;
+                    $prices[] = (int) round($unitPrice);
+                    $quantities[] = $quantity;
+                    $descriptions[] = $product->description ?: 'Produk ' . $product->name;
+                    $totalAmount += $unitPrice * $quantity;
+                }
+
+                if (empty($products)) {
+                    throw new \RuntimeException('Tidak ada produk valid dalam keranjang.');
+                }
+
+                $trxId = 'TRX-' . now()->format('YmdHis') . '-' . strtoupper(\Illuminate\Support\Str::random(8));
+                $order = Order::create([
+                    'user_id' => $user->id,
+                    'total' => $totalAmount,
+                    'status' => 'pending',
+                    'trx_id' => $trxId,
+                ]);
+
+                foreach ($cart as $item) {
+                    $productModel = $item['model'] ?? $item['product'] ?? null;
+                    $productId = $productModel?->id ?? $item['id'] ?? null;
+                    $quantity = (int) ($item['qty'] ?? $item['quantity'] ?? 0);
+                    $product = Product::find($productId);
+
+                    if ($product && $quantity > 0) {
+                        OrderItem::create([
+                            'order_id' => $order->id,
+                            'product_id' => $product->id,
+                            'quantity' => $quantity,
+                            'price' => $product->price,
+                        ]);
+                    }
+                }
+
+                return [
+                    'order' => $order,
+                    'products' => $products,
+                    'prices' => $prices,
+                    'quantities' => $quantities,
+                    'descriptions' => $descriptions,
+                    'total' => $totalAmount,
+                ];
+            });
+
+            $order = $order['order'];
+            $payload = [
+                'product' => $orderDataProducts = $order ? $orderDataProducts ?? [] : [],
+                'price' => [],
+                'qty' => [],
+                'description' => [],
+            ];
+
+            // Rebuild the provider payload from persisted order items to avoid
+            // relying on mutable client-side cart values after order creation.
+            $orderItems = $order->orderItems()->with('product')->get();
+            $payload = [
+                'product' => $orderItems->map(fn ($item) => $item->product?->name ?? 'Product')->all(),
+                'price' => $orderItems->map(fn ($item) => (int) round($item->price))->all(),
+                'qty' => $orderItems->pluck('quantity')->map(fn ($qty) => (int) $qty)->all(),
+                'description' => $orderItems->map(fn ($item) => $item->product?->description ?: 'Product')->all(),
+                'buyerName' => $user->name,
+                'buyerEmail' => $user->email,
+                'buyerPhone' => $user->phone ?? '',
+                'returnUrl' => config('ipaymu.url.return') ?: route('checkout.success'),
+                'notifyUrl' => config('ipaymu.url.notify') ?: route('ipaymu.callback'),
+                'cancelUrl' => config('ipaymu.url.cancel') ?: route('checkout.cancel'),
+                'referenceId' => $order->trx_id,
+            ];
+
+            $returnUrl = $payload['returnUrl'];
+            $payload['returnUrl'] = $returnUrl . (str_contains($returnUrl, '?') ? '&' : '?') . 'trx_id=' . urlencode($order->trx_id);
+
+            Log::info('Starting iPaymu checkout request.', [
+                'order_id' => $order->id,
+                'item_count' => count($payload['product']),
+                'total_amount' => $order->total,
+            ]);
+
+            $jsonBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
+            if ($jsonBody === false) {
+                throw new \RuntimeException('Gagal menyiapkan data pembayaran.');
+            }
+
+            $requestBody = strtolower(hash('sha256', $jsonBody));
+            $stringToSign = 'POST:' . config('ipaymu.va') . ':' . $requestBody . ':' . config('ipaymu.api_key');
+            $signature = hash_hmac('sha256', $stringToSign, config('ipaymu.api_key'));
+
+            $response = Http::timeout(30)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'signature' => $signature,
                     'va' => config('ipaymu.va'),
-                    'timestamp' => $timestamp,
+                    'timestamp' => now()->format('YmdHis'),
                 ])
                 ->post(config('ipaymu.api_url'), $payload);
 
             $result = $response->json();
 
-            Log::info('iPaymu Response:', [
-                'status_code' => $response->status(),
-                'response_body' => $result
-            ]);
-
-            // Cek response status
-            if (!$response->successful()) {
-                Log::error('iPaymu HTTP Error:', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
+            if (!$response->successful() || !isset($result['Status']) || (int) $result['Status'] !== 200) {
+                $order->update(['status' => 'canceled']);
+                Log::warning('iPaymu rejected checkout initialization.', [
+                    'order_id' => $order->id,
+                    'http_status' => $response->status(),
                 ]);
-                session()->flash('error', 'Gagal terhubung ke payment gateway');
+                session()->flash('error', 'Gagal memulai pembayaran. Silakan coba kembali.');
                 return redirect()->route('cart');
             }
 
-            if ($result && isset($result['Status']) && $result['Status'] == 200) {
-                if (isset($result['Data']['Url'])) {
-                    // Update order dengan session ID dari iPaymu
-                    if (isset($result['Data']['SessionID'])) {
-                        $order->update(['trx_id' => $result['Data']['SessionID']]);
-                    }
-                    
-                    // Redirect ke halaman pembayaran
-                    return redirect()->away($result['Data']['Url']);
-                } else {
-                    Log::error('iPaymu Response missing URL:', $result);
-                    session()->flash('error', 'Response dari payment gateway tidak lengkap');
-                    return redirect()->route('cart');
-                }
-            } else {
-                $errorMessage = $result['Message'] ?? 'Gagal memulai transaksi';
-                Log::error('iPaymu Error Response:', $result);
-                session()->flash('error', $errorMessage);
+            if (empty($result['Data']['Url'])) {
+                $order->update(['status' => 'canceled']);
+                Log::warning('iPaymu response did not include a payment URL.', ['order_id' => $order->id]);
+                session()->flash('error', 'Respons payment gateway tidak lengkap.');
                 return redirect()->route('cart');
             }
-        } catch (\Exception $e) {
-            Log::error('iPaymu Exception:', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+
+            if (!empty($result['Data']['SessionID'])) {
+                // Keep the merchant reference (trx_id) stable; store provider SID separately.
+                $order->update(['session_id' => (string) $result['Data']['SessionID']]);
+            }
+
+            return redirect()->away($result['Data']['Url']);
+        } catch (\Throwable $exception) {
+            if (isset($order) && $order instanceof Order && $order->status === 'pending') {
+                $order->update(['status' => 'canceled']);
+            }
+
+            Log::error('iPaymu checkout initialization failed.', [
+                'exception' => get_class($exception),
+                'message' => $exception->getMessage(),
             ]);
-            session()->flash('error', 'Terjadi kesalahan sistem: ' . $e->getMessage());
+
+            session()->flash('error', 'Terjadi kesalahan saat menyiapkan pembayaran. Silakan coba kembali.');
             return redirect()->route('cart');
         }
     }
 
-    public function handleNotify(Request $request)
+        public function success(Request $request)
     {
-        // Log semua data masuk buat debug
-        Log::info('Notify Callback Headers:', $request->headers->all());
-        Log::info('Notify Callback Body:', $request->all());
+        $user = Auth::user();
+        $trxId = (string) $request->query('trx_id', '');
 
-        $trxId = $request->input('reference_id') 
-               ?? $request->input('trx_id') 
-               ?? $request->input('sid')
-               ?? $request->input('sessionId');
-        
-        $status = $request->input('status') 
-                ?? $request->input('Status')
-                ?? $request->input('transaction_status');
-
-        if (!$trxId) {
-            Log::error('Missing transaction ID in notify callback');
-            return response()->json(['error' => 'Missing transaction ID'], 400);
+        if (!$user || $trxId === '') {
+            return redirect()->route('cart')->with('error', 'Referensi pembayaran tidak ditemukan.');
         }
 
-        $order = Order::where('trx_id', $trxId)->first();
+        $order = Order::where('trx_id', $trxId)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
 
-        if (!$order) {
-            Log::error('Order not found for trx_id: ' . $trxId);
-            return response()->json(['error' => 'Order not found'], 404);
+        if ($order->status !== 'completed') {
+            return redirect()->route('cart')->with('warning', 'Pembayaran belum terkonfirmasi. Keranjang tidak dikosongkan.');
         }
 
-        // Update status berdasarkan response dari iPaymu
-        if (in_array(strtolower($status), ['berhasil', 'success', 'completed']) || $status == 1) {
-            $order->status = 'completed';
-            $order->save();
-
-            // Clear cart setelah pembayaran berhasil
-            Session::forget('cart');
-
-            Log::info("Order #{$order->id} marked as completed.");
-        } elseif (in_array(strtolower($status), ['pending', 'waiting'])) {
-            $order->status = 'pending';
-            $order->save();
-            
-            Log::info("Order #{$order->id} still pending.");
-        } elseif (in_array(strtolower($status), ['failed', 'cancelled', 'expired'])) {
-            $order->status = 'canceled';
-            $order->save();
-            
-            Log::info("Order #{$order->id} marked as failed.");
-        }
-
-        return response()->json(['message' => 'Notification processed']);
-    }
-
-    public function success()
-    {
-        // Kosongkan session cart
         Session::forget('cart');
-
-        // Tampilkan view sukses
-        return view('livewire/success')->with('success', 'Pembayaran berhasil! Terima kasih.');
+        return view('livewire/success')->with('success', 'Pembayaran berhasil. Terima kasih.');
     }
+
+    public function cancel(Request $request)
+    {
+        $trxId = (string) $request->query('trx_id', '');
+        if ($trxId !== '' && Auth::check()) {
+            Order::where('trx_id', $trxId)
+                ->where('user_id', Auth::id())
+                ->where('status', 'pending')
+                ->update(['status' => 'canceled']);
+        }
+
+        return redirect()->route('cart')->with('warning', 'Pembayaran dibatalkan. Pesanan belum dibayar.');
+    }
+
 }
