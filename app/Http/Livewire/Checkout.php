@@ -101,13 +101,6 @@ class Checkout extends Component
             });
 
             $order = $order['order'];
-            $payload = [
-                'product' => $orderDataProducts = $order ? $orderDataProducts ?? [] : [],
-                'price' => [],
-                'qty' => [],
-                'description' => [],
-            ];
-
             // Rebuild the provider payload from persisted order items to avoid
             // relying on mutable client-side cart values after order creation.
             $orderItems = $order->orderItems()->with('product')->get();
