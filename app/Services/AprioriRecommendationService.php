@@ -31,8 +31,27 @@ class AprioriRecommendationService
             }
 
             $recommendations = json_decode(trim($output), true);
-            return is_array($recommendations) ? $recommendations : [];
-        } catch (\Exception $e) {
+
+            if (!is_array($recommendations) || array_key_exists('error', $recommendations)) {
+                Log::warning('Apriori recommendation script returned an invalid or error response.');
+                return [];
+            }
+
+            $productId = (int) $productId;
+            $validated = [];
+
+            foreach ($recommendations as $candidate) {
+                $recommendationId = filter_var($candidate, FILTER_VALIDATE_INT);
+
+                if ($recommendationId === false || $recommendationId < 1 || $recommendationId === $productId) {
+                    continue;
+                }
+
+                $validated[] = $recommendationId;
+            }
+
+            return array_values(array_unique($validated));
+        } catch (\Throwable $e) {
             Log::error("Apriori Recommendation Error: " . $e->getMessage());
             return [];
         }
@@ -106,7 +125,7 @@ class AprioriRecommendationService
         Log::info("CSV file created at {$filePath}. Size: " . filesize($filePath) . " bytes");
         return true;
 
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         Log::error("Error exporting transactions for user {$userId}: " . $e->getMessage());
         return false;
     }

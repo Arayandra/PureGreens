@@ -18,7 +18,8 @@ def load_transactions(file_path):
             .values.tolist()
         )
         return transactions
-    except Exception as e:
+    except Exception as error:
+        print(f"Unable to read transaction data: {error}", file=sys.stderr)
         return []
 
 def encode_transactions(transactions):
@@ -51,7 +52,8 @@ def run_apriori(transactions, min_support=0.04):  # Ubah ke 0.04
             return pd.DataFrame()
         rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=0.5)
         return rules
-    except Exception as e:
+    except Exception as error:
+        print(f"Apriori rule generation failed: {error}", file=sys.stderr)
         return pd.DataFrame()
 
 def get_recommendations(product_id, rules):
@@ -100,9 +102,9 @@ def main():
         recommendations = get_recommendations(product_id, rules)
         
         print(json.dumps(recommendations))
-    except Exception as e:
-        error_msg = {"error": {"message": str(e), "traceback": traceback.format_exc()}}
-        print(json.dumps(error_msg))
+    except Exception as error:
+        traceback.print_exc(file=sys.stderr)
+        print(json.dumps({"error": str(error)}))
         sys.exit(1)
 
 if __name__ == "__main__":

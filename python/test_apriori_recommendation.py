@@ -60,6 +60,21 @@ class AprioriRecommendationTests(unittest.TestCase):
     def test_empty_rules_return_an_empty_recommendation_list(self):
         self.assertEqual(get_recommendations(1, pd.DataFrame()), [])
 
+    def test_load_transactions_reports_file_errors_to_stderr(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stderr
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            missing_path = Path(directory) / "missing.csv"
+            error_output = io.StringIO()
+
+            with redirect_stderr(error_output):
+                self.assertEqual(load_transactions(str(missing_path)), [])
+
+            self.assertIn("Unable to read transaction data", error_output.getvalue())
+
     def test_load_transactions_groups_unique_products_by_order(self):
         import tempfile
         from pathlib import Path

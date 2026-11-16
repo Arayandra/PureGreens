@@ -106,7 +106,7 @@ Instal dependensi Python:
 python -m pip install -r python/requirements.txt
 ```
 
-Secara default aplikasi menjalankan perintah `python3`. Pada Windows, ubah `PYTHON_BINARY=python` di `.env` bila perintah `python3` tidak tersedia. Modul rekomendasi membaca riwayat item pesanan dari database dan menjalankan `python/apriori_recommendation.py`.
+Secara default aplikasi menjalankan perintah `python3`. Pada Windows, ubah `PYTHON_BINARY=python` di `.env` bila perintah `python3` tidak tersedia. Modul rekomendasi membaca riwayat item pesanan dari database dan menjalankan `python/apriori_recommendation.py`. Hasil dari proses Python divalidasi kembali di PHP; respons error, ID non-integer, ID tidak valid, dan rekomendasi produk yang sama dengan input tidak dikirim ke tampilan.
 
 ## Konfigurasi iPaymu
 
@@ -117,11 +117,11 @@ IPAYMU_API_KEY=
 IPAYMU_VA=
 IPAYMU_API_URL=
 IPAYMU_RETURN_URL=http://127.0.0.1:8000/checkout-success
-IPAYMU_NOTIFY_URL=http://127.0.0.1:8000/payment/notify
+IPAYMU_NOTIFY_URL=https://your-public-domain.example/ipaymu/callback
 IPAYMU_CANCEL_URL=http://127.0.0.1:8000/checkout-cancel
 ```
 
-Jangan pernah melakukan commit terhadap `.env`, API key, VA, password, atau kredensial pembayaran. Sebelum digunakan di production, lengkapi dan verifikasi endpoint notifikasi pembayaran, validasi tanda tangan callback sesuai dokumentasi iPaymu, HTTPS, serta alur status transaksi.
+Jangan pernah melakukan commit terhadap `.env`, API key, VA, password, atau kredensial pembayaran. Endpoint callback aplikasi sudah tersedia di `POST /ipaymu/callback`, diverifikasi dengan HMAC-SHA256, dan memeriksa nominal serta status transaksi. Ganti URL contoh di atas dengan alamat HTTPS publik yang dapat dijangkau server iPaymu; `127.0.0.1` hanya cocok untuk pengembangan lokal dan tidak dapat dijangkau provider. Daftarkan URL publik yang sama pada dashboard iPaymu, lalu uji seluruh alur menggunakan kredensial sandbox sebelum transaksi nyata.
 
 ## Pengujian dan build
 
