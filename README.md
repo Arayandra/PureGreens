@@ -164,3 +164,10 @@ File upload pengguna dan hasil invoice di `storage/app/public` tidak disertakan 
 ## Lisensi
 
 Belum ada lisensi proyek yang ditentukan secara khusus. Tambahkan file lisensi sebelum distribusi publik apabila diperlukan.
+
+
+## Framework maintenance
+
+This application currently uses Laravel 10, Livewire 2, and Filament 2. Laravel 10 is outside its official security-support window. The payment callback now has an explicit route, HMAC verification, amount matching, and signature unit tests; nevertheless, use only iPaymu sandbox credentials until an end-to-end provider test is completed.
+
+Plan a staged upgrade to a supported Laravel release and compatible Livewire/Filament versions. Do not upgrade all packages in one unreviewed step: first verify PHP 8.3+, Laravel 13 compatibility, Filament panel/resource changes, Livewire component behavior, Cashier, invoice generation, and the Python recommendation bridge. The current CI tests the existing framework and checks the Apriori unit tests; it does not make this legacy framework production-supported.
