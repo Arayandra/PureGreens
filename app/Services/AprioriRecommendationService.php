@@ -70,7 +70,13 @@ class AprioriRecommendationService
                 ->toArray();
         }
 
-        Log::info("Transactions for user {$userId}: ", $transactions);
+        $transactionCount = count($transactions);
+        $itemCount = array_sum(array_map('count', $transactions));
+        Log::info('Prepared transaction data for product recommendations.', [
+            'transaction_count' => $transactionCount,
+            'item_count' => $itemCount,
+            'customer_scoped' => $userId !== null,
+        ]);
         if (empty($transactions)) {
             Log::warning("No transactions found.");
             return false;
