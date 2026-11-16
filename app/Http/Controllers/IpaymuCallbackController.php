@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Services\IpaymuSignatureVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,23 +20,14 @@ class IpaymuCallbackController extends Controller
             return response()->json(['message' => 'Callback verification is not configured.'], 503);
         }
 
-        $payload = $this->normalizePayload($request->all());
-        unset($payload['signature']);
-        ksort($payload, SORT_STRING);
-
-        $jsonPayload = json_encode($payload);
-        if ($jsonPayload === false) {
-            return response()->json(['message' => 'Invalid callback payload.'], 400);
-        }
-
-        // iPaymu callback signatures use the Merchant VA number as HMAC secret.
-        // PHP json_encode escapes forward slashes by default, as required by its guide.
-        $expectedSignature = hash_hmac('sha256', $jsonPayload, $secret);
-        if (!hash_equals($expectedSignature, $receivedSignature)) {
+        /** @var IpaymuSignatureVerifier $signatureVerifier */
+        $signatureVerifier = app(IpaymuSignatureVerifier::class);
+        if (!$signatureVerifier->verify($request->all(), $receivedSignature, $secret)) {
             Log::warning('Rejected iPaymu callback with an invalid signature.');
             return response()->json(['message' => 'Invalid signature.'], 401);
         }
 
+        $payload = $signatureVerifier->normalize($request->all());
         $referenceId = $payload['reference_id'] ?? $payload['referenceId'] ?? null;
         $sessionId = $payload['sid'] ?? null;
 
@@ -44,11 +36,19 @@ class IpaymuCallbackController extends Controller
         }
 
         $callbackAmount = $payload['amount'] ?? $payload['total'] ?? null;
+        if ($callbackAmount === null || !is_numeric($callbackAmount)) {
+            return response()->json(['message' => 'Payment amount is required.'], 422);
+        }
+
         $statusText = strtolower((string) ($payload['status'] ?? ''));
         $statusCode = isset($payload['status_code']) ? (int) $payload['status_code'] : null;
+        $transactionStatusCode = isset($payload['transaction_status_code'])
+            ? (int) $payload['transaction_status_code']
+            : null;
 
         $nextStatus = null;
-        if ($statusCode === 1 && in_array($statusText, ['berhasil', 'success', 'completed'], true)) {
+        $successfulText = in_array($statusText, ['berhasil', 'success', 'completed'], true);
+        if (($statusCode === 1 && $successfulText) || ($transactionStatusCode === 6 && $successfulText)) {
             $nextStatus = 'completed';
         } elseif ($statusCode === -2 || in_array($statusText, ['expired', 'failed', 'cancelled', 'canceled'], true)) {
             $nextStatus = 'canceled';
@@ -113,41 +113,4 @@ class IpaymuCallbackController extends Controller
         ], 200);
     }
 
-    private function normalizePayload(array $raw): array
-    {
-        $normalized = [];
-
-        foreach ($raw as $key => $value) {
-            if ($key === 'additional_info') {
-                if ($value === null || $value === '[]') {
-                    $normalized[$key] = [];
-                } elseif (is_string($value)) {
-                    $decoded = json_decode($value, true);
-                    $normalized[$key] = is_array($decoded) ? $decoded : $value;
-                } else {
-                    $normalized[$key] = $value;
-                }
-
-                continue;
-            }
-
-            if (in_array($key, ['trx_id', 'status_code', 'transaction_status_code', 'paid_off'], true)) {
-                $normalized[$key] = is_numeric($value) ? (int) $value : $value;
-                continue;
-            }
-
-            if ($key === 'is_escrow') {
-                $normalized[$key] = in_array($value, [true, 1, '1', 'true'], true);
-                continue;
-            }
-
-            $normalized[$key] = is_array($value) ? $value : (string) $value;
-        }
-
-        if (!array_key_exists('additional_info', $normalized)) {
-            $normalized['additional_info'] = [];
-        }
-
-        return $normalized;
-    }
 }
